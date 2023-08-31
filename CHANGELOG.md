@@ -1,5 +1,11 @@
 <!--next-version-placeholder-->
 
+## v0.2.0 (2023-08-31)
+
+### Feature
+
+* **docker:** Add db setup script ([`5aa994f`](https://github.com/entelecheia/agentgpt-container/commit/5aa994f06a603633e93dbc57ff5de65d89fbd15f))
+
 ## v0.1.0 (2023-08-31)
 
 ### Feature
