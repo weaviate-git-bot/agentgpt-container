@@ -1,76 +1,106 @@
 version: "3"
 
 services:
-  # Defines a service name
   next:
+    container_name: next
     build:
-      # Sets the build context to the current directory
       context: .
-      # Specifies the Dockerfile to use for the build
-      dockerfile: .docker/Dockerfile.app
-      # Specifies build-time variables (ARGs)
+      dockerfile: .docker/Dockerfile.next
       args:
-        ARG_BUILD_FROM: $BUILD_FROM
-        ARG_USERNAME: $CONTAINER_USERNAME
-        ARG_USER_UID: $CONTAINER_USER_UID
-        ARG_USER_GID: $CONTAINER_USER_GID
-        ARG_WORKSPACE_ROOT: $CONTAINER_WORKSPACE_ROOT
-        ARG_USER_FULLNAME: $APP_USER_FULLNAME
-        ARG_USER_EMAIL: $APP_USER_EMAIL
-        ARG_GITHUB_USERNAME: $GITHUB_USERNAME
-        ARG_SYSTEM_HOSTNAME: $CONTAINER_HOSTNAME
-        ARG_WORKSPACE_LOCATION: $CONTAINER_WORKSPACE_LOCATION
-        ARG_APP_GITHUB_USERNAME: $APP_GITHUB_USERNAME
-        ARG_APP_SOURCE_REPO: $APP_SOURCE_REPO
-        ARG_APP_INSTALL_ROOT: $APP_INSTALL_ROOT
-        ARG_APP_CLONE_DIRNAME: $APP_CLONE_DIRNAME
-        ARG_APP_SOURCE_BRANCH: $APP_SOURCE_BRANCH
-        ARG_APP_SERVICE_NAME: $APP_SERVICE_NAME
-        ARG_DOTFILES_VERSION: $DOTFILES_VERSION
-    # Sets the image name for the built image
-    image: $IMAGE_NAME:$IMAGE_TAG
-    # Sets the hostname of the container
-    hostname: $CONTAINER_HOSTNAME
-    command:
-      # Specifies the command to be executed when the container is run
-      - bash
-      - $CONTAINER_LAUNCH_SCRIPT
-    # set the environment variables
-    environment:
-      USER_FULLNAME: $APP_USER_FULLNAME
-      USER_EMAIL: $APP_USER_EMAIL
-      GITHUB_USERNAME: $APP_GITHUB_USERNAME
-      WORKSPACE_LOCATION: $CONTAINER_WORKSPACE_LOCATION
-      WORKSPACE_ROOT: $CONTAINER_WORKSPACE_ROOT
-      SYSTEM_HOSTNAME: $CONTAINER_HOSTNAME
-      IMAGE_VARIANT: $IMAGE_VARIANT
-      GIT_COMMIT_GPGSIGN: $GIT_COMMIT_GPGSIGN
-    ulimits:
-      # Sets the stack size and memory lock limits
-      stack: 67108864
-      memlock: -1
-    # Allows the container to use the host's IPC namespace
-    ipc: $CONTAINER_IPC
+        ARG_NODE_ENV: $NODE_ENV
+    image: $IMAGE_NAME:$NEXT_IMAGE_TAG
     ports:
-      # Maps the container's SSH and Web service ports to the host's ports
-      - "$HOST_SSH_PORT:$CONTAINER_SSH_PORT"
-      - "$HOST_WEB_SVC_PORT:$CONTAINER_WEB_SVC_PORT"
+      - "$HOST_NEXT_PORT:$CONTAINER_NEXT_PORT"
     volumes:
-      # Maps directories from the host to the container
-      - "$PWD/.docker/scripts:$CONTAINER_WORKSPACE_ROOT/scripts"
-      - "$WORKSPACE_ROOT:$CONTAINER_WORKSPACE_ROOT"
-      - "$HOME/.cache:/home/$USERNAME/.cache"
-      - "$HOME/.ssh:/home/$USERNAME/.ssh"
-      - "$HOME/.config/gh:/home/$USERNAME/.config/gh"
-      - "$HOME/.passage:/home/$USERNAME/.passage"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            # Reserves the specified GPU for the container
-            - driver: nvidia
-              device_ids: ["${CONTAINER_CUDA_DEVICE_ID}"]
-              capabilities: [gpu]
+      - .docker/docker.app.env:/next/.env
+      - /next/node_modules
+      - /next/.next
+
+  platform:
+    container_name: platform
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.platform
+      target: prod
+    image: $IMAGE_NAME:$PLATFORM_IMAGE_TAG
+    ports:
+      - "$HOST_WEB_SVC_PORT:$CONTAINER_WEB_SVC_PORT"
+    restart: always
+    # volumes:
+    #   - ./platform:/app/src/
+    env_file:
+      - .docker/docker.app.env
+    environment:
+      REWORKD_PLATFORM_HOST: $REWORKD_PLATFORM_HOST"
+      REWORKD_PLATFORM_DB_HOST: "$REWORKD_PLATFORM_DATABASE_HOST"
+      REWORKD_PLATFORM_DB_PORT: "$REWORKD_PLATFORM_DATABASE_PORT"
+      REWORKD_PLATFORM_DB_USER: "$REWORKD_PLATFORM_DATABASE_USER"
+      REWORKD_PLATFORM_DB_PASS: "$REWORKD_PLATFORM_DATABASE_PASSWORD"
+      REWORKD_PLATFORM_DB_BASE: "$REWORKD_PLATFORM_DATABASE_NAME"
+    depends_on:
+      - db
+
+  db:
+    container_name: db
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.db
+    image: $IMAGE_NAME:$DB_IMAGE_TAG
+    restart: always
+    ports:
+      - "$HOST_DB_PORT:$CONTAINER_DB_PORT"
+    environment:
+      MYSQL_DATABASE: "$DATABASE_NAME"
+      MYSQL_USER: "$DATABASE_USER"
+      MYSQL_PASSWORD: "$DATABASE_PASSWORD"
+      MYSQL_ROOT_PASSWORD: "$DATABASE_ROOT_PASSWORD"
+      MYSQL_TCP_PORT: "$DATABASE_PORT"
+    volumes:
+      - db_data:/var/lib/mysql
+    command:
+      - "mysqld"
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+
+  weaviate:
+    image: semitechnologies/weaviate:1.19.6
+    restart: on-failure:0 # this should be 'no' or at least have ':1'
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      CLUSTER_HOSTNAME: "node1"
+    volumes:
+      - weaviate:/var/lib/weaviate
+
+  # Central routing / management for selenium
+  selenium-hub:
+    image: selenium/hub:latest
+    container_name: selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+
+  # Running selenium instance. An instance will block per request so we need to scale this out
+  chrome:
+    image: seleniarm/node-chromium
+    #    image: selenium/node-chrome:4 # If you're on an non-ARM system
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+
+volumes:
+  weaviate:
+  db_data:
+
 networks:
   default:
     # Sets the name of the default network and makes it external
