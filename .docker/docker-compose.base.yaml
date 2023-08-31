@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  next:
+    container_name: next
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.next
+    image: $IMAGE_NAME:$NEXT_IMAGE_TAG
+    ports:
+      - "3000:3000"
+    volumes:
+      - .env.next:/next/.env
+      - /next/node_modules
+      - /next/.next

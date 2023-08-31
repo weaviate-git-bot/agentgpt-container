@@ -1,0 +1,108 @@
+version: "3"
+
+services:
+  next:
+    container_name: next
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.next
+      args:
+        ARG_NODE_ENV: $NODE_ENV
+    image: $IMAGE_NAME:$NEXT_IMAGE_TAG
+    ports:
+      - "$HOST_NEXT_PORT:$CONTAINER_NEXT_PORT"
+    volumes:
+      - .docker/docker.app.env:/next/.env
+      - /next/node_modules
+      - /next/.next
+
+  platform:
+    container_name: platform
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.platform
+      target: prod
+    image: $IMAGE_NAME:$PLATFORM_IMAGE_TAG
+    ports:
+      - "$HOST_WEB_SVC_PORT:$CONTAINER_WEB_SVC_PORT"
+    restart: always
+    # volumes:
+    #   - ./platform:/app/src/
+    env_file:
+      - .docker/docker.app.env
+    environment:
+      REWORKD_PLATFORM_HOST: $REWORKD_PLATFORM_HOST"
+      REWORKD_PLATFORM_DB_HOST: "$REWORKD_PLATFORM_DATABASE_HOST"
+      REWORKD_PLATFORM_DB_PORT: "$REWORKD_PLATFORM_DATABASE_PORT"
+      REWORKD_PLATFORM_DB_USER: "$REWORKD_PLATFORM_DATABASE_USER"
+      REWORKD_PLATFORM_DB_PASS: "$REWORKD_PLATFORM_DATABASE_PASSWORD"
+      REWORKD_PLATFORM_DB_BASE: "$REWORKD_PLATFORM_DATABASE_NAME"
+    depends_on:
+      - db
+
+  db:
+    container_name: db
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile.db
+    image: $IMAGE_NAME:$DB_IMAGE_TAG
+    restart: always
+    ports:
+      - "$HOST_DB_PORT:$CONTAINER_DB_PORT"
+    environment:
+      MYSQL_DATABASE: "$DATABASE_NAME"
+      MYSQL_USER: "$DATABASE_USER"
+      MYSQL_PASSWORD: "$DATABASE_PASSWORD"
+      MYSQL_ROOT_PASSWORD: "$DATABASE_ROOT_PASSWORD"
+      MYSQL_TCP_PORT: "$DATABASE_PORT"
+    volumes:
+      - db_data:/var/lib/mysql
+    command:
+      - "mysqld"
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+
+  weaviate:
+    image: semitechnologies/weaviate:1.19.6
+    restart: on-failure:0 # this should be 'no' or at least have ':1'
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      CLUSTER_HOSTNAME: "node1"
+    volumes:
+      - weaviate:/var/lib/weaviate
+
+  # Central routing / management for selenium
+  selenium-hub:
+    image: selenium/hub:latest
+    container_name: selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+
+  # Running selenium instance. An instance will block per request so we need to scale this out
+  chrome:
+    image: seleniarm/node-chromium
+    #    image: selenium/node-chrome:4 # If you're on an non-ARM system
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+
+volumes:
+  weaviate:
+  db_data:
+
+networks:
+  default:
+    # Sets the name of the default network and makes it external
+    name: $CONTAINER_NETWORK_NAME
+    external: true
