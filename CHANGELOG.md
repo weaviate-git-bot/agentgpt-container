@@ -1,5 +1,11 @@
 <!--next-version-placeholder-->
 
+## v0.3.1 (2023-09-01)
+
+### Fix
+
+* **docker:** Add EXTERNAL_HOST env variable and update URLs ([`8fb413e`](https://github.com/entelecheia/agentgpt-container/commit/8fb413e50d3d009df2b48ed7749c94060bcf5512))
+
 ## v0.3.0 (2023-09-01)
 
 ### Feature

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "agentgpt"
-version = "0.3.0"
+version = "0.3.1"
 description = "A Container for the AI Agent, AgentGPT"
 authors = ["Young Joon Lee <entelecheia@hotmaail.com>"]
 license = "MIT"
