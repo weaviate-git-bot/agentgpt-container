@@ -1,5 +1,11 @@
 <!--next-version-placeholder-->
 
+## v0.3.0 (2023-09-01)
+
+### Feature
+
+* **.docker:** Add new environment variables, add new example environment file ([`87bb3ff`](https://github.com/entelecheia/agentgpt-container/commit/87bb3ff46406050bcfecf6015e2ba1e8ba893ee7))
+
 ## v0.2.0 (2023-08-31)
 
 ### Feature
